@@ -516,7 +516,11 @@ private extension AudioManager
                 for index in buffers.indices {
                     if let data = buffers[index].mData {
                         memset(data, 0, requestedBytes)
-                        buffers[index].mDataByteSize = UInt32(requestedBytes)
+                        buffers[index] = AudioBuffer(
+                            mNumberChannels: buffers[index].mNumberChannels,
+                            mDataByteSize: UInt32(requestedBytes),
+                            mData: data
+                        )
                     }
                 }
                 return noErr
