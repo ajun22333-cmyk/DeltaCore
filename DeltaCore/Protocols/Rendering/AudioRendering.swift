@@ -12,4 +12,5 @@ import Foundation
 public protocol AudioRendering: NSObjectProtocol
 {
     var audioBuffer: RingBuffer { get }
+    var bgmAudioBuffer: RingBuffer { get }
 }

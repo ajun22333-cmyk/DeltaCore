@@ -64,6 +64,7 @@ public class AudioManager: NSObject, AudioRendering
         didSet
         {
             self.audioBuffer.isEnabled = self.isEnabled
+            self.bgmAudioBuffer.isEnabled = self.isEnabled
             
             self.updateOutputVolume()
             
@@ -84,6 +85,7 @@ public class AudioManager: NSObject, AudioRendering
             }
             
             self.audioBuffer.reset()
+            self.bgmAudioBuffer.reset()
         }
     }
     
@@ -108,6 +110,7 @@ public class AudioManager: NSObject, AudioRendering
     }
 
     public private(set) var audioBuffer: RingBuffer
+    public private(set) var bgmAudioBuffer: RingBuffer
     
     public internal(set) var rate = 1.0 {
         didSet {
@@ -141,6 +144,9 @@ public class AudioManager: NSObject, AudioRendering
         }
     }
     private var _sourceNode: Any! = nil
+
+    @available(iOS 13.0, *)
+    private var bgmSourceNode: AVAudioSourceNode?
     
     private var audioConverter: AVAudioConverter?
     private var audioConverterRequiredFrameCount: AVAudioFrameCount?
@@ -165,6 +171,7 @@ public class AudioManager: NSObject, AudioRendering
         
         // Temporary. Will be replaced with more accurate RingBuffer in resetAudioEngine().
         self.audioBuffer = RingBuffer(preferredBufferSize: 4096)!
+        self.bgmAudioBuffer = RingBuffer(preferredBufferSize: 32768 * 4 * 2)!
         
         do
         {
@@ -251,6 +258,7 @@ public extension AudioManager
         }
         
         self.audioBuffer.isEnabled = false
+        self.bgmAudioBuffer.isEnabled = false
 
         do
         {
@@ -361,6 +369,7 @@ private extension AudioManager
                 fatalError("Cannot initialize RingBuffer with preferredBufferSize of \(preferredBufferSize)")
             }
             self.audioBuffer = ringBuffer
+            self.bgmAudioBuffer.reset()
             
             let audioConverter = AVAudioConverter(from: self.audioFormat, to: outputAudioFormat)
             self.audioConverter = audioConverter
@@ -378,6 +387,15 @@ private extension AudioManager
                 self.audioEngine.attach(self.sourceNode)
                 
                 self.audioEngine.connect(self.sourceNode, to: self.timePitchEffect, format: outputAudioFormat)
+
+                if let bgmSourceNode = self.bgmSourceNode
+                {
+                    self.audioEngine.detach(bgmSourceNode)
+                }
+                let bgmSourceNode = self.makeBGMSourceNode()
+                self.bgmSourceNode = bgmSourceNode
+                self.audioEngine.attach(bgmSourceNode)
+                self.audioEngine.connect(bgmSourceNode, to: self.audioEngine.mainMixerNode, format: outputAudioFormat)
             }
             else
             {
@@ -481,6 +499,38 @@ private extension AudioManager
         }
     }
     
+    @available(iOS 13.0, *)
+    func makeBGMSourceNode() -> AVAudioSourceNode
+    {
+        let audioFormat = self.audioFormat
+        let audioBuffer = self.bgmAudioBuffer
+
+        return AVAudioSourceNode(format: audioFormat) { (_, _, frameCount, audioBufferList) -> OSStatus in
+            let buffers = UnsafeMutableAudioBufferListPointer(audioBufferList)
+            let requestedBytes = Int(frameCount) * audioFormat.frameSize
+
+            guard audioBuffer.isEnabled,
+                  audioBuffer.availableBytesForReading >= requestedBytes,
+                  let output = buffers.first?.mData else
+            {
+                for buffer in buffers {
+                    if let data = buffer.mData {
+                        memset(data, 0, requestedBytes)
+                        buffer.mDataByteSize = UInt32(requestedBytes)
+                    }
+                }
+                return noErr
+            }
+
+            let readBytes = audioBuffer.read(into: output, preferredSize: requestedBytes)
+            if readBytes < requestedBytes {
+                memset(output, 0, requestedBytes)
+            }
+            buffers[0].mDataByteSize = UInt32(requestedBytes)
+            return noErr
+        }
+    }
+
     @available(iOS 13.0, *)
     func makeSourceNode() -> AVAudioSourceNode
     {
