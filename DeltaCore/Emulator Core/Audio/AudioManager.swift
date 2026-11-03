@@ -510,25 +510,23 @@ private extension AudioManager
             let requestedBytes = Int(frameCount) * audioFormat.frameSize
 
             guard audioBuffer.isEnabled,
-                  audioBuffer.availableBytesForReading >= requestedBytes,
                   let output = buffers.first?.mData else
             {
                 for index in buffers.indices {
                     if let data = buffers[index].mData {
                         memset(data, 0, requestedBytes)
-                        buffers[index] = AudioBuffer(
-                            mNumberChannels: buffers[index].mNumberChannels,
-                            mDataByteSize: UInt32(requestedBytes),
-                            mData: data
-                        )
+                        buffers[index].mDataByteSize = UInt32(requestedBytes)
                     }
                 }
                 return noErr
             }
 
+            // Consume whatever is queued and silence only the missing tail.
+            // Requiring a full render quantum here caused short producer/consumer
+            // timing differences to output silence and leave stale samples queued.
             let readBytes = audioBuffer.read(into: output, preferredSize: requestedBytes)
             if readBytes < requestedBytes {
-                memset(output, 0, requestedBytes)
+                memset(output.advanced(by: readBytes), 0, requestedBytes - readBytes)
             }
             buffers[0].mDataByteSize = UInt32(requestedBytes)
             return noErr

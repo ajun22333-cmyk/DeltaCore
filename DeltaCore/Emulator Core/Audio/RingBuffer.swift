@@ -130,13 +130,8 @@ public extension RingBuffer
         guard self.isEnabled else { return 0 }
         guard self.availableBytesForReading > 0 else { return 0 }
         
-        if preferredSize > self.availableBytesForReading
-        {
-            print("Ring Buffer Empty. Available: \(self.availableBytesForReading). Requested: \(preferredSize) Max: \(self.bufferLength). Filled: \(self.usedBytesCount).")
-            
-            self.reset()
-        }
-        
+        // Return partial data instead of flushing the ring buffer on underrun.
+        // The audio consumer is responsible for zero-filling any missing samples.
         let size = min(preferredSize, self.availableBytesForReading)
         memcpy(buffer, self.tail, size)
         
