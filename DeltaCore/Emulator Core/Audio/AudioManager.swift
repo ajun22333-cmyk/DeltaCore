@@ -513,10 +513,10 @@ private extension AudioManager
                   audioBuffer.availableBytesForReading >= requestedBytes,
                   let output = buffers.first?.mData else
             {
-                for buffer in buffers {
-                    if let data = buffer.mData {
+                for index in buffers.indices {
+                    if let data = buffers[index].mData {
                         memset(data, 0, requestedBytes)
-                        buffer.mDataByteSize = UInt32(requestedBytes)
+                        buffers[index].mDataByteSize = UInt32(requestedBytes)
                     }
                 }
                 return noErr
